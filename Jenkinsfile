@@ -10,12 +10,12 @@ pipeline {
       steps { checkout scm }
     }
     stage('Build y pruebas') {
-      steps { sh 'mvn -B clean verify' }
+      steps { bat 'mvn -B clean verify' }
     }
     stage('Análisis SonarQube') {
       steps {
         withSonarQubeEnv('SonarQube') {
-          sh 'mvn -B sonar:sonar -Dsonar.projectKey=psw-pipeline-base -Dsonar.projectName="PSW Pipeline Base"'
+          bat 'mvn -B sonar:sonar -Dsonar.projectKey=psw-pipeline-base -Dsonar.projectName="PSW Pipeline Base"'
         }
       }
     }
@@ -24,27 +24,41 @@ pipeline {
     }
     stage('Pruebas JMeter') {
       steps {
-        sh '''
-          set -eu
-          mkdir -p target/jmeter
-          java -jar target/psw-pipeline-base-0.0.1-SNAPSHOT.jar --server.port=${APP_PORT} > target/app.log 2>&1 &
-          APP_PID=$!
-          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
-          for attempt in $(seq 1 60); do
-            if curl -fsS "http://127.0.0.1:${APP_PORT}/products" >/dev/null; then break; fi
-            sleep 2
-          done
-          curl -fsS "http://127.0.0.1:${APP_PORT}/products" >/dev/null
-          jmeter -n -t "${JMETER_PLAN}" -JbaseUrl="http://127.0.0.1:${APP_PORT}" \
-            -l target/jmeter/results.jtl -e -o target/jmeter/report
+        powershell '''
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path 'target/jmeter' | Out-Null
+          $app = Start-Process -FilePath 'java' `
+            -ArgumentList @('-jar', 'target/psw-pipeline-base-0.0.1-SNAPSHOT.jar', "--server.port=$env:APP_PORT") `
+            -PassThru `
+            -RedirectStandardOutput 'target/app.log' `
+            -RedirectStandardError 'target/app-error.log'
+          try {
+            $ready = $false
+            for ($attempt = 0; $attempt -lt 60; $attempt++) {
+              try {
+                Invoke-WebRequest -Uri "http://127.0.0.1:$env:APP_PORT/products" -UseBasicParsing | Out-Null
+                $ready = $true
+                break
+              } catch {
+                Start-Sleep -Seconds 2
+              }
+            }
+            if (-not $ready) { throw 'La aplicación no respondió en /products dentro del tiempo esperado.' }
+            & jmeter -n -t $env:JMETER_PLAN `
+              "-JbaseUrl=http://127.0.0.1:$env:APP_PORT" `
+              -l target/jmeter/results.jtl -e -o target/jmeter/report
+            if ($LASTEXITCODE -ne 0) { throw "JMeter terminó con código $LASTEXITCODE." }
+          } finally {
+            if ($app -and -not $app.HasExited) { Stop-Process -Id $app.Id -Force }
+          }
         '''
       }
-      post { always { archiveArtifacts artifacts: 'target/jmeter/**, target/app.log', allowEmptyArchive: true } }
+      post { always { archiveArtifacts artifacts: 'target/jmeter/**, target/app.log, target/app-error.log', allowEmptyArchive: true } }
     }
   }
   post {
-    success { slackSend channel: '#pipeline-calidad', color: 'good', message: "✅ ${env.JOB_NAME} #${env.BUILD_NUMBER} finalizó correctamente: ${env.BUILD_URL}" }
-    failure { slackSend channel: '#pipeline-calidad', color: 'danger', message: "❌ ${env.JOB_NAME} #${env.BUILD_NUMBER} presentó un error: ${env.BUILD_URL}" }
-    unstable { slackSend channel: '#pipeline-calidad', color: 'warning', message: "⚠️ ${env.JOB_NAME} #${env.BUILD_NUMBER} quedó inestable: ${env.BUILD_URL}" }
+    success { echo "Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} finalizó correctamente: ${env.BUILD_URL}" }
+    failure { echo "Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} presentó un error: ${env.BUILD_URL}" }
+    unstable { echo "Pipeline ${env.JOB_NAME} #${env.BUILD_NUMBER} quedó inestable: ${env.BUILD_URL}" }
   }
 }
