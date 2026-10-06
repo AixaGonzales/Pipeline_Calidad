@@ -16,7 +16,7 @@ pipeline {
     stage('Análisis SonarQube') {
       steps {
         withSonarQubeEnv('SonarQube') {
-          bat '"%MAVEN_CMD%" -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=psw-pipeline-base -Dsonar.projectName="PSW Pipeline Base"'
+          bat '"%MAVEN_CMD%" -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=PSW-Pipeline-Base -Dsonar.projectName="PSW Pipeline Base"'
         }
       }
     }
