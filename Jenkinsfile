@@ -4,18 +4,19 @@ pipeline {
   environment {
     APP_PORT = '8080'
     JMETER_PLAN = 'jmeter/pipeline-calidad.jmx'
+    MAVEN_CMD = 'C:\\apache-maven-3.9.9\\bin\\mvn.cmd'
   }
   stages {
     stage('Checkout') {
       steps { checkout scm }
     }
     stage('Build y pruebas') {
-      steps { bat 'mvn -B clean verify' }
+      steps { bat '"%MAVEN_CMD%" -B clean verify' }
     }
     stage('Análisis SonarQube') {
       steps {
         withSonarQubeEnv('SonarQube') {
-          bat 'mvn -B sonar:sonar -Dsonar.projectKey=psw-pipeline-base -Dsonar.projectName="PSW Pipeline Base"'
+          bat '"%MAVEN_CMD%" -B sonar:sonar -Dsonar.projectKey=psw-pipeline-base -Dsonar.projectName="PSW Pipeline Base"'
         }
       }
     }
