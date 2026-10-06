@@ -2,7 +2,7 @@ pipeline {
   agent any
   options { timestamps(); disableConcurrentBuilds() }
   environment {
-    APP_PORT = '8080'
+    APP_PORT = '18080'
     JMETER_PLAN = 'jmeter/pipeline-calidad.jmx'
     MAVEN_CMD = 'C:\\apache-maven-3.9.9\\bin\\mvn.cmd'
   }
